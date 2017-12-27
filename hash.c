@@ -12,6 +12,7 @@ void init();
 void clipboard_copy(char *);
 uint8_t* get_password();
 void hashify_digest(uint8_t *, uint8_t *);
+void hash_512(uint32_t *);
 
 uint32_t mod_db[MD5_SIZE];
 uint32_t shift_amts[MD5_SIZE];
@@ -19,17 +20,16 @@ uint32_t shift_amts[MD5_SIZE];
 int main(int argc, char *argv[])
 {
     init();
-    uint8_t *password_padded= malloc(MD5_SIZE);
     uint8_t *password = get_password();
+    uint8_t *password_padded = malloc(MD5_SIZE);
     uint32_t password_length = strlen(password); //guaranteed less than 512bit, so we dont have to mod512
+    uint8_t *password_hashed = malloc(16); //16bytes == 128bits == md5 standard length
 
     memset(password_padded, 0x00, MD5_SIZE);
     strcpy(password_padded, password);
 
     pad_digest(password_padded, password_length);
-    hashify_digest(password_padded, NULL);
-    
-    for(int i = 0; i < MD5_SIZE; i++) printf("%02x ", password_padded[i]);
+    hashify_digest(password_padded, password_hashed);
     
     free(password_padded);
     free(password);
@@ -158,11 +158,12 @@ uint8_t* get_password()
 //md5_hash is a new digest that is hashified, and ready for use.
 void hashify_digest(uint8_t *digest, uint8_t *md5_hash)
 {
-    uint32_t *digest_32 = calloc(MD5_SIZE/4, sizeof(uint32_t));
+    uint32_t *digest_32 = malloc(MD5_SIZE);
+    memset(digest_32, 0x00, MD5_SIZE);
 
-    for(int i = 0; i < (MD5_SIZE - 8); i+=4)
+    for(int i = 0; i < MD5_SIZE - 8; i+=4)
     {
-        digest_32[i] = 0x00000000; //init the index
+        digest_32[i] = 0x00000000;
 
         //here, we reverse the ordering to little endian...
         digest_32[i] = digest_32[i] | digest[i];
@@ -171,4 +172,88 @@ void hashify_digest(uint8_t *digest, uint8_t *md5_hash)
         digest_32[i] = digest_32[i] | digest[i+3] << 24;
         printf("%02d :::: %08x \n", i, digest_32[i]);
     }
+    //todo: should this be little endian? specification says "lower-order word in front", not byte... 
+    digest_32[14] = 0x00000000;
+    digest_32[15] = 0x00000000;
+    digest_32[14] = (digest[MD5_SIZE - 8] << 24) | 
+        (digest[MD5_SIZE - 7] << 16) | 
+        (digest[MD5_SIZE - 6] << 8)  |
+        (digest[MD5_SIZE - 5]);
+        printf("%02d :::: %08x \n", 14, digest_32[14]);
+        printf("%02d :::: %08x \n", 15, digest_32[15]);
+    //digest_32[15] is guaranteed to be 0 due to password length restrictions
+
+    hash_512(digest_32);
+}
+
+//Instead of bit shifting, we instead "rotate" bits.
+//This avoids overflow, and instead wraps the bits around to the other end.
+//value is the number to be shifted
+//shift is the amount of bits to shift by
+//returns the value, shifted by shift
+unsigned int left_rotate(const unsigned int value, int shift) 
+{
+    return (value << shift) | (value >> (sizeof(value)*8 - shift));
+}
+
+//Takes a 512-bit message and applies a hashing algorithm.
+//processed_digest is a digest, processed for hashing (see hashify_digest()).
+//processed_digest will be changed to a hashed string. (out parameter)
+//this is the main md5 algorithm
+void hash_512(uint32_t *processed_digest)
+{
+    unsigned int a_initial = 0x67452301; unsigned int A = a_initial;
+    unsigned int b_initial = 0xefcdab89; unsigned int B = b_initial;
+    unsigned int c_initial = 0x98badcfe; unsigned int C = c_initial;
+    unsigned int d_initial = 0x10325476; unsigned int D = d_initial;
+    
+    //Main loop:
+    for(int i = 0; i < MD5_SIZE; i++)
+    {
+        uint32_t F, G;
+        if(i <= 15)
+        {
+            F = (B & C) | ((~B) & D);
+            G = i;
+        }
+        else if(i >= 16 && i <= 31)
+        {
+            F = (D & B) | ((~D) & C);
+            G = (5*i + 1) % 16;
+        }
+        else if(i >= 32 && i <= 47)
+        {
+            F = B ^ C ^ D;
+            G = (3*i + 5) % 16;
+        }
+        else if(i >= 48 && i <= 63)
+        {
+            F = C ^ (B | (~D));
+            G = (7*i) % 16;
+        }
+
+        F = F + A + mod_db[i] + processed_digest[G];
+        A = D;
+        D = C;
+        C = B;
+        B = B + left_rotate(F, shift_amts[i]);
+    }
+
+    a_initial += A;
+    b_initial += B;
+    c_initial += C;
+    d_initial += D;
+
+    free(processed_digest);
+    processed_digest = malloc(MD5_SIZE/4); //the final, processed string...
+
+    processed_digest[0] = a_initial;
+    processed_digest[1] = b_initial;
+    processed_digest[2] = c_initial;
+    processed_digest[3] = d_initial;
+    printf("%x", a_initial);
+    printf("%x", b_initial);
+    printf("%x", c_initial);
+    printf("%x", d_initial);
+    
 }
