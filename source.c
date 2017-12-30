@@ -149,13 +149,11 @@ uint32_t to_int32(const uint8_t *bytes)
         | ((uint32_t) bytes[3] << 24);
 }
 
-void convert_to32(uint8_t *message)
+void convert_to32(uint8_t *message, uint32_t length)
 {
-    for(int i = 0; i < MD5_SIZE; i+=4) printf("%02d :::: %02x%02x%02x%02x \n", i, message[i], message[1+i], message[2+i], message[3+i]);
-    for (int i = 0; i < 16; ++i)
-            chunks[i] = to_int32(message + i*4); //??
-    for(int i = 0; i < MD5_SIZE/4; i++) printf("%02d --> %08x \n", i, chunks[i]);
-    
+    for (int i = 0; i < 14; ++i)
+            chunks[i] = to_int32(message + i*4); 
+    chunks[14] = length;
 }
 void to_bytes(uint32_t val, uint8_t *bytes)
 {
@@ -167,7 +165,7 @@ void to_bytes(uint32_t val, uint8_t *bytes)
 
 
 
-void MD5(uint8_t *message)
+uint8_t* MD5(uint8_t *message)
 {
     uint32_t message_length = strlen(message);
     uint32_t padded_length;
@@ -181,38 +179,77 @@ void MD5(uint8_t *message)
 
     padded_message[message_length] = 0x80; //set the first non-message bit to 1 as the specification states
     message_length *= 8;                   //turn this into the bit count of the message size for further processing
-    padded_message[MD5_SIZE-8] = (uint8_t)(message_length & 0xFF000000); //append the size of the message (in bits, as we did above) to the message
-    padded_message[MD5_SIZE-7] = (uint8_t)(message_length & 0x00FF0000); //low-order-word comes first
-    padded_message[MD5_SIZE-6] = (uint8_t)(message_length & 0x0000FF00);
-    padded_message[MD5_SIZE-5] = (uint8_t)(message_length & 0x000000FF);
-
-    convert_to32(padded_message);
 
     int a0 = 0x67452301;   //A
     int b0 = 0xefcdab89;   //B
     int c0 = 0x98badcfe;   //C
     int d0 = 0x10325476;   //D
 
+    convert_to32(padded_message, message_length);
     transform_digest(&a0, &b0, &c0, &d0);
-    uint8_t digest[16];
+    
+    uint8_t *digest = malloc(MD5_SIZE/4);
+    memset(digest, 0, MD5_SIZE/4);
 
     to_bytes(a0, digest);
     to_bytes(b0, digest + 4);
     to_bytes(c0, digest + 8);
     to_bytes(d0, digest + 12);
-    
-    for(int i = 0; i<16;i++) printf("%2.2x", digest[i]);
-    
 
+    return digest;
 }
 
+//MD5 hash a message a certain amount of times, then return the hash.
+//message is the message you would like to turn into a hash
+//passes is the amount of times we will hash the returned hash
+void hashify_recursive(uint8_t *message, int passes)
+{
+    uint8_t temp[32];
+    strcpy(temp, message);
+    for(int i = 0; i < passes; i++) 
+    {
+        printf("HASH:: %s\n", temp);
+        temp = MD5(temp);   
+    }
+    
+}
 
+uint8_t get_passes()
+{
+    int num, nitems = 0;
+
+    while(nitems == 0 || num > 255)
+    {
+        printf("How many times would you like to re-hash the value? (max 255): ");
+        nitems = scanf("%d", &num);
+        if (nitems <= 0 || num > 255)
+        {   
+            printf("The number you picked is not applicable. Try again.");
+        } 
+        else break;
+    }
+    return num;
+}
 //////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char *argv[])
 {
+    char final_digest[32];    
     uint8_t *message = get_password();
-    MD5(message);
+    uint8_t count = get_passes();
+
+    hashify_recursive(message, count);
+
+    for(int i = 0; i < MD5_SIZE/4; i++)
+    {
+        char *temp;
+        sprintf(temp, "%2.2x", message);
+        printf("%d", i);
+        strcpy(final_digest+i*2, temp);
+    }
+
+    printf("Your hash value is: %s\n", final_digest);
+    printf("The hash was copied to your clipboard.\n");
 
     free(message);
     getchar();
