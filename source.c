@@ -87,6 +87,24 @@ uint8_t* get_password()
         
     }
 }
+//Gets the amount of hash passes from the user.
+//returns the amount of times we should rehash our message.
+uint8_t get_passes()
+{
+    int num, nitems = 0;
+
+    while(nitems == 0 || num > 255)
+    {
+        printf("How many times would you like to re-hash the value? (max 255): ");
+        nitems = scanf("%d", &num);
+        if (nitems <= 0 || num > 255)
+        {   
+            printf("The number you picked is not applicable. Try again.");
+        } 
+        else break;
+    }
+    return num;
+}
 
 //This "rotates" bits. This avoids bit-shift overflow, and instead wraps the bits around to the other end of the byte(s).
 //value is the number to be shifted
@@ -165,7 +183,7 @@ void to_bytes(uint32_t val, uint8_t *bytes)
 
 
 
-uint8_t* MD5(uint8_t *message)
+uint8_t* MD5(uint8_t *message, uint8_t final_digest[16])
 {
     uint32_t message_length = strlen(message);
     uint32_t padded_length;
@@ -188,7 +206,7 @@ uint8_t* MD5(uint8_t *message)
     convert_to32(padded_message, message_length);
     transform_digest(&a0, &b0, &c0, &d0);
     
-    uint8_t *digest = malloc(MD5_SIZE/4);
+    uint8_t digest[16];
     memset(digest, 0, MD5_SIZE/4);
 
     to_bytes(a0, digest);
@@ -196,61 +214,57 @@ uint8_t* MD5(uint8_t *message)
     to_bytes(c0, digest + 8);
     to_bytes(d0, digest + 12);
 
-    return digest;
-}
-
-//MD5 hash a message a certain amount of times, then return the hash.
-//message is the message you would like to turn into a hash
-//passes is the amount of times we will hash the returned hash
-void hashify_recursive(uint8_t *message, int passes)
-{
-    uint8_t temp[32];
-    strcpy(temp, message);
-    for(int i = 0; i < passes; i++) 
-    {
-        printf("HASH:: %s\n", temp);
-        temp = MD5(temp);   
-    }
-    
-}
-
-uint8_t get_passes()
-{
-    int num, nitems = 0;
-
-    while(nitems == 0 || num > 255)
-    {
-        printf("How many times would you like to re-hash the value? (max 255): ");
-        nitems = scanf("%d", &num);
-        if (nitems <= 0 || num > 255)
-        {   
-            printf("The number you picked is not applicable. Try again.");
-        } 
-        else break;
-    }
-    return num;
+    memcpy(final_digest, digest, 16);
 }
 //////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char *argv[])
-{
-    char final_digest[32];    
+{  
+    uint8_t str_digest[33]; 
     uint8_t *message = get_password();
-    uint8_t count = get_passes();
+    uint8_t passes = get_passes();
+    uint8_t final_digest[16];
+        
+    memset(str_digest, '\0', 33);
 
-    hashify_recursive(message, count);
+    // //////////////////////////////////// TODO: remove this when we get multihashing to work
+    // MD5(message, final_digest);
+    // for(int i = 0; i < MD5_SIZE/4; i++) //now we can convert to a string
+    // {
+    //     char temp[2];
+    //     sprintf(temp, "%2.2x", final_digest[i]);
+    //     str_digest[i*2] = temp[0];
+    //     str_digest[(i*2)+1] = temp[1];
+    // }
+    // ///////////////////////////////////
 
-    for(int i = 0; i < MD5_SIZE/4; i++)
+    for(int j = 1; j <= passes; j++)
     {
-        char *temp;
-        sprintf(temp, "%2.2x", message);
-        printf("%d", i);
-        strcpy(final_digest+i*2, temp);
+        MD5(message, final_digest);
+
+        for(int i = 0; i < MD5_SIZE/4; i++) //now we can convert to a string
+        {
+            char temp[2];
+            sprintf(temp, "%2.2x", final_digest[i]);
+            str_digest[i*2] = temp[0];
+            str_digest[(i*2)+1] = temp[1];
+        }
+        free(message);
+        if(j < passes) //if this is the "last" loop, then let's keep our info so we can give it to the user
+        {
+            message = malloc(33);
+            memset(message, '\0', 33);
+            memcpy(message, str_digest, 33);
+            memset(final_digest, 0, 16);
+
+            memset(str_digest, '\0', 33); 
+        }
+        
+        
     }
 
-    printf("Your hash value is: %s\n", final_digest);
-    printf("The hash was copied to your clipboard.\n");
-
-    free(message);
-    getchar();
+    printf("%s \n", str_digest);
+    getchar(); 
+    getchar();     
+    return 0;
 }
