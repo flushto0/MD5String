@@ -62,7 +62,7 @@ uint8_t* get_password()
         memset(input, '\0', sizeof(input));
         int inlen = 0;
 
-        printf("Enter a password (max 32 characters): \n");
+        printf("Enter a password (max 32 characters): ");
         fgets(input, sizeof(input), stdin);
 
         int newline_index = strcspn(input, "\n");
@@ -227,17 +227,6 @@ int main(int argc, char *argv[])
         
     memset(str_digest, '\0', 33);
 
-    // //////////////////////////////////// TODO: remove this when we get multihashing to work
-    // MD5(message, final_digest);
-    // for(int i = 0; i < MD5_SIZE/4; i++) //now we can convert to a string
-    // {
-    //     char temp[2];
-    //     sprintf(temp, "%2.2x", final_digest[i]);
-    //     str_digest[i*2] = temp[0];
-    //     str_digest[(i*2)+1] = temp[1];
-    // }
-    // ///////////////////////////////////
-
     for(int j = 1; j <= passes; j++)
     {
         MD5(message, final_digest);
@@ -263,8 +252,11 @@ int main(int argc, char *argv[])
         
     }
 
-    printf("%s \n", str_digest);
-    getchar(); 
-    getchar();     
+    clipboard_copy(str_digest);
+    printf("Finished. The hash was copied to your clipboard. \n");
+    
+    getchar();
+    getchar();
+    
     return 0;
 }

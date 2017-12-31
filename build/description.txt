@@ -1,0 +1,4 @@
+This project will allow you to turn your password into a hash value, and further allow for re-hashing the returned hash up to 255 times.
+
+I decided to create this because I was keen to the idea of hashing a word a certain amount of times, and then using it as a password, but 
+I couldnt find any programs that would explicitly rehash my already hashed word for me.
